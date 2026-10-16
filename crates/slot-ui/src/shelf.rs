@@ -27,7 +27,9 @@ pub fn rest_y(h: f32) -> f32 {
 pub fn foot_y(h: f32) -> f32 {
     rest_y(h) + h
 }
-const OMEGA: f32 = 16.0;
+/// The settle spring's frequency. Public because the frontend's step clamp is
+/// derived from it: `Shelf::update` is stable only while `2 * OMEGA * dt < 1`.
+pub const OMEGA: f32 = 16.0;
 const PART: f32 = 130.0;
 
 const SLOTS: i32 = 3;

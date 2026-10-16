@@ -3,6 +3,26 @@ use std::time::{Duration, Instant};
 use slot_gfx::{Compositor, Draw, ScreenEffect, TexId, OUT_H, OUT_W};
 
 const PAPER: &[u8] = include_bytes!("../assets/paper.png");
+
+/// The longest step the animations are integrated over, whatever the frame
+/// took. 25 ms.
+///
+/// The shelf settles on a critically damped spring stepped by the real frame
+/// time (`Shelf::update`, OMEGA = 16): `vel += (-2w*vel - w*w*x) * dt`. The
+/// velocity term is `vel * (1 - 2w*dt)`, which turns **negative past
+/// dt = 1/2w = 31.25 ms** -- the velocity flips sign every frame and the
+/// carousel rings back and forth instead of settling. Upstream never meets
+/// that because it has a GPU; this panel's shelf was measured at 30-41 ms a
+/// frame with three clear Game Boy Color shells in view (2026-10-16, sprite
+/// stage 25.6-37.3 ms of it), and the ringing was reported from the handheld
+/// before it was explained.
+///
+/// Clamping restores what upstream intends rather than changing it: critical
+/// damping, no oscillation. The cost is that an animation runs slow rather
+/// than wrong on a frame slower than this, which is the right way round. 25 ms
+/// leaves the velocity term at 0.2 rather than near zero, so it damps hard
+/// instead of creeping up on the flip.
+const MAX_DT: f32 = 0.025;
 use slot_input::{InputSource, Millis};
 use slot_power::{Platform, Power};
 use slot_store::{format_stamp, BezelPick, Platform as Console};
@@ -680,7 +700,7 @@ impl Frontend {
         self.session
             .set_menu_dpad_display(input.menu_dpad_display());
         self.session.feed(events, now);
-        let dt = self.last.elapsed().as_secs_f32();
+        let dt = self.last.elapsed().as_secs_f32().min(MAX_DT);
         self.last = Instant::now();
         self.session.update(dt);
     }
@@ -1159,5 +1179,34 @@ fn upload_rgba(
             *slot = Some(id);
             id
         }
+    }
+}
+
+#[cfg(test)]
+mod step_clamp_tests {
+    use super::MAX_DT;
+
+    /// `Shelf::update`'s velocity step, which is the whole of the stability
+    /// question: `vel * (1 - 2w*dt)`. Positive and under one is a spring that
+    /// settles; negative is one that reverses every frame.
+    fn factor(dt: f32) -> f32 {
+        1.0 - 2.0 * slot_ui::OMEGA * dt
+    }
+
+    #[test]
+    fn the_clamp_keeps_the_settle_spring_damping() {
+        let k = factor(MAX_DT);
+        assert!(k > 0.0, "velocity reverses at the clamp: {k}");
+        assert!(k < 1.0, "the clamp stops damping: {k}");
+    }
+
+    /// The bound this exists for, named so the next person does not have to
+    /// re-derive it: the handheld's shelf was measured at 30-41 ms a frame
+    /// with three clear shells in view, and reversed.
+    #[test]
+    fn an_unclamped_slow_frame_is_what_reverses_it() {
+        assert!(factor(1.0 / (2.0 * slot_ui::OMEGA) + 0.001) < 0.0);
+        assert!(factor(0.035) < 0.0, "35 ms should reverse");
+        assert!(MAX_DT < 1.0 / (2.0 * slot_ui::OMEGA));
     }
 }
