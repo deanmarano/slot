@@ -33,6 +33,8 @@ const SNAPSHOT_EVERY: u32 = 2;
 
 const STALL: Duration = Duration::from_millis(25);
 
+const RESYNC_FRAMES: u32 = 4;
+
 const RATE_WINDOW: u32 = 300;
 
 const TRACE_EVERY: u64 = 300;
@@ -190,7 +192,13 @@ impl EmuHandle {
         let worker_link = link.clone();
         let join = std::thread::Builder::new()
             .name("slot-emu".into())
-            .spawn(move || worker.run(core, rom, ring, sav, resume, worker_link))
+            .spawn(move || {
+                #[cfg(target_os = "linux")]
+                unsafe {
+                    libc::setpriority(0, 0, -8);
+                }
+                worker.run(core, rom, ring, sav, resume, worker_link)
+            })
             .ok();
         if join.is_none() {
             shared
@@ -891,7 +899,12 @@ impl Worker {
             let now = Instant::now();
             match deadline.checked_duration_since(now) {
                 Some(wait) => std::thread::sleep(wait),
-                None => deadline = now,
+                // A sleep cannot land finer than the kernel's tick, so resetting
+                // the deadline would make every overshoot permanent.
+                None if now.saturating_duration_since(deadline) > PRESENT * RESYNC_FRAMES => {
+                    deadline = now;
+                }
+                None => {}
             }
         }
         for cmd in self.cmds.try_iter() {
