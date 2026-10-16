@@ -493,7 +493,10 @@ impl Shelf {
                 } else {
                     Placed { x, y, w, h }
                 };
-                // Back plastic, then the board, then the front shell.
+                // Back plastic, then the board, then the front shell -- but
+                // only when there is an interior to put them under. A face
+                // built by `cart_stack` already carries both, and drawing them
+                // again would be two more full-size blends to no visible end.
                 if let Some(tex) = self.interiors.get(i).copied().flatten() {
                     out.push(Draw::Tex {
                         x: bx,
@@ -503,16 +506,16 @@ impl Shelf {
                         tex,
                         alpha: alpha * dim,
                     });
-                }
-                if let Some(tex) = board {
-                    out.push(Draw::Tex {
-                        x: bx,
-                        y: by,
-                        w: bw,
-                        h: bh,
-                        tex,
-                        alpha: alpha * dim,
-                    });
+                    if let Some(tex) = board {
+                        out.push(Draw::Tex {
+                            x: bx,
+                            y: by,
+                            w: bw,
+                            h: bh,
+                            tex,
+                            alpha: alpha * dim,
+                        });
+                    }
                 }
             }
             out.push(match self.face(i) {

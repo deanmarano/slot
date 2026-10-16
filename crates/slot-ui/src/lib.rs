@@ -44,11 +44,11 @@ pub use board::{
     SLIDE_SHARE, SLIDE_UP, SOCKET_H, SOCKET_U, SOCKET_V, SOCKET_W, TURN_PAD,
 };
 pub use cart::{
-    cart_backing, cart_box, cart_face, cart_face_with, cart_interior, cart_shadow, clean_label,
-    gb_cart_shadow, gb_label_panel, gb_shell_of, is_clear, label_colour, label_panel, label_size,
-    label_tags, label_text, neutral_shell, seated_box, shows_interior, CartFace, CART_H, CART_W,
-    GBC_LABEL_H, GBC_LABEL_W, GBC_LABEL_X, GBC_LABEL_Y, GB_CART_H, GB_CART_W, GB_LABEL_H,
-    GB_LABEL_W, GB_LABEL_X, GB_LABEL_Y, LABEL_H, LABEL_W, LABEL_WELL, LABEL_X, LABEL_Y,
+    cart_backing, cart_box, cart_face, cart_face_with, cart_interior, cart_shadow, cart_stack,
+    clean_label, gb_cart_shadow, gb_label_panel, gb_shell_of, is_clear, label_colour, label_panel,
+    label_size, label_tags, label_text, neutral_shell, seated_box, shows_interior, CartFace,
+    CART_H, CART_W, GBC_LABEL_H, GBC_LABEL_W, GBC_LABEL_X, GBC_LABEL_Y, GB_CART_H, GB_CART_W,
+    GB_LABEL_H, GB_LABEL_W, GB_LABEL_X, GB_LABEL_Y, LABEL_H, LABEL_W, LABEL_WELL, LABEL_X, LABEL_Y,
 };
 pub use clock::{clock_label, date_time_text, hhmm, set_clock_hint_face, ClockPicker, Field};
 pub use draw::{Canvas, Draw, Layout, TexId, OUT_H, OUT_W};

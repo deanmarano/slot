@@ -774,3 +774,56 @@ fn a_gba_cart_is_backed_by_the_whole_picker_board() {
     let mid = pak.rgba[(((pak.h / 2) * pak.w + pak.w / 2) * 4 + 3) as usize];
     assert!(mid > 200, "the pak board is empty in the middle");
 }
+
+/// The flattened stack is what the three draws made, so the shelf can send one
+/// sprite instead of three. Composited here independently of `cart_stack`'s own
+/// arithmetic, against the same layers in the same order.
+#[test]
+fn a_clear_cart_flattens_to_what_its_three_layers_drew() {
+    let d = tmp_root();
+    let mut rom = vec![0u8; 0x100];
+    rom[0xac..0xb0].copy_from_slice(b"U3IE");
+    std::fs::write(d.path().join("Games/GBA/Boktai.gba"), rom).expect("write rom");
+    let carts = scan(d.path()).unwrap();
+    let cart = carts.iter().find(|c| c.stem == "Boktai").expect("scanned");
+
+    let face = cart_face(cart);
+    let stack = slot_ui::cart_stack(cart, cart_face(cart));
+    assert_eq!((stack.w, stack.h), (face.w, face.h));
+
+    let interior = slot_ui::cart_interior(cart);
+    let board = slot_ui::cart_backing(slot_ui::gb_shell_of(cart));
+    let mut want = interior.rgba.clone();
+    for layer in [&board.rgba, &face.rgba] {
+        for (d, s) in want.chunks_exact_mut(4).zip(layer.chunks_exact(4)) {
+            let a = f32::from(s[3]) / 255.0;
+            for c in 0..3 {
+                d[c] = (f32::from(s[c]) * a + f32::from(d[c]) * (1.0 - a)).round() as u8;
+            }
+            d[3] = (f32::from(s[3]) + f32::from(d[3]) * (1.0 - a)).round() as u8;
+        }
+    }
+    let off = stack
+        .rgba
+        .iter()
+        .zip(&want)
+        .filter(|(a, b)| a.abs_diff(**b) > 1)
+        .count();
+    assert_eq!(
+        off, 0,
+        "{off} bytes differ from the three layers composited"
+    );
+}
+
+/// A solid cart has nothing under its plastic, and is handed back as it came.
+#[test]
+fn a_solid_cart_is_not_restacked() {
+    let d = tmp_root();
+    write_rom(&d, "Kururin.gba", "KURURIN");
+    let carts = scan(d.path()).unwrap();
+    let cart = carts.iter().find(|c| c.stem == "Kururin").expect("scanned");
+    assert_eq!(shell_for(cart).finish, Finish::Solid);
+    let face = cart_face(cart);
+    let stack = slot_ui::cart_stack(cart, cart_face(cart));
+    assert_eq!(stack.rgba, face.rgba);
+}

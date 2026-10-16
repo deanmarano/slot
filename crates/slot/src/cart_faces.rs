@@ -6,7 +6,7 @@ use std::thread;
 
 use slot_gfx::{Compositor, TexId};
 use slot_store::Cart;
-use slot_ui::{cart_face_with, cart_interior, shows_interior, CartFace};
+use slot_ui::{cart_face_with, cart_stack, CartFace};
 
 use crate::app::{App, FaceWant};
 use crate::label_cache::label_art;
@@ -152,8 +152,12 @@ fn work(queue: &Shared, outbox: &Sender<Built>, root: &Path) {
                 q = wake.wait(q).unwrap_or_else(|e| e.into_inner());
             }
         };
-        let face = cart_face_with(&cart, label_art(root, &cart));
-        let interior = shows_interior(&cart).then(|| cart_interior(&cart));
+        // The clear layers are composited into the face here, on the worker,
+        // rather than drawn over it three times a frame on the shelf. See
+        // `cart_stack`: it costs a difference in how a faded cart composites,
+        // and 9 ms a cart on this panel.
+        let face = cart_stack(&cart, cart_face_with(&cart, label_art(root, &cart)));
+        let interior: Option<CartFace> = None;
         if outbox.send((key, face, interior)).is_err() {
             return;
         }

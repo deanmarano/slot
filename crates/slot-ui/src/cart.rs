@@ -248,6 +248,68 @@ pub fn cart_backing(shell: Option<GbShell>) -> CartFace {
     }
 }
 
+/// The three layers a clear cart is drawn from, composited into one face:
+/// the coloured interior, the board, then the plastic and its label.
+///
+/// The shelf draws these as three sprites over the same rect. On a device with
+/// no GPU that is three full-size blends of a 312x337 texture, two of which
+/// touch nearly every pixel: measured on the handheld at 6.0, 2.1 and 4.2 ms,
+/// so **13 ms for one cart**, against 2 ms for a solid one. Three clear shells
+/// in view put the shelf at 30-41 ms a frame, which is also what made the
+/// settle spring ring (see `MAX_DT` in the frontend).
+///
+/// Flattening them costs a difference nobody asked for and should know about:
+/// a faded cart -- the ones either side of the selection -- now composites as
+/// one stack at that alpha rather than layer over layer, each at that alpha.
+/// Upstream's way darkens twice where the layers overlap; this does not. It is
+/// arguably the more correct of the two, and it is certainly not the same
+/// pixels, which is why it is said out loud here.
+///
+/// Returns the face untouched for a solid cart, and for any cart whose layers
+/// are not all one size -- then three draws is still the right answer.
+pub fn cart_stack(cart: &Cart, face: CartFace) -> CartFace {
+    if !is_clear(cart) {
+        return face;
+    }
+    let interior = cart_interior(cart);
+    let board = cart_backing(gb_shell_of(cart));
+    let size = (face.w, face.h);
+    if (interior.w, interior.h) != size || (board.w, board.h) != size {
+        return face;
+    }
+    let mut rgba = interior.rgba;
+    over(&mut rgba, &board.rgba);
+    over(&mut rgba, &face.rgba);
+    CartFace {
+        rgba,
+        w: face.w,
+        h: face.h,
+    }
+}
+
+/// src-over, straight alpha both sides, rounding as the rasteriser's blend
+/// does -- so a flattened stack is the same pixels the three draws made.
+fn over(dst: &mut [u8], src: &[u8]) {
+    let div255 = |v: u32| {
+        let v = v + 128;
+        (v + (v >> 8)) >> 8
+    };
+    for (d, s) in dst.chunks_exact_mut(4).zip(src.chunks_exact(4)) {
+        let a = u32::from(s[3]);
+        if a == 0 {
+            continue;
+        }
+        if a == 255 {
+            d.copy_from_slice(s);
+            continue;
+        }
+        for c in 0..3 {
+            d[c] = div255(u32::from(s[c]) * a + u32::from(d[c]) * (255 - a)) as u8;
+        }
+        d[3] = (a + div255(u32::from(d[3]) * (255 - a))) as u8;
+    }
+}
+
 pub fn label_size(cart: &Cart) -> (u32, u32) {
     let (_, _, lw, lh) = spec(shape_of(cart)).label;
     (lw, lh)
