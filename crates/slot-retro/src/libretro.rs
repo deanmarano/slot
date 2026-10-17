@@ -567,14 +567,27 @@ impl RetroCore for LibretroCore {
     fn load(&mut self, rom: &Path) -> Result<(), CoreError> {
         self.unload();
         self.state_size = None;
-        self.rom = std::fs::read(rom)?;
+        // A core that asks for the path opens the file itself, and the bytes
+        // read here would be held for the life of the game and never looked
+        // at. gpSP asks; mGBA does not. On this handheld that is 32 MB for
+        // Mother 3 against about 40 MB free -- it could not be loaded at all
+        // -- and 16 for Golden Sun, 8 for Kirby.
+        let mut info = crate::ffi::SystemInfo::default();
+        unsafe { (self.api.get_system_info)(&mut info) };
+        self.rom = match info.need_fullpath {
+            true => Vec::new(),
+            false => std::fs::read(rom)?,
+        };
         self.rom_path = Some(
             CString::new(rom.as_os_str().as_encoded_bytes())
                 .map_err(|_| CoreError::Load("rom path contains a nul".into()))?,
         );
         let info = GameInfo {
             path: self.rom_path.as_ref().map_or(ptr::null(), |p| p.as_ptr()),
-            data: self.rom.as_ptr() as *const c_void,
+            data: match self.rom.is_empty() {
+                true => ptr::null(),
+                false => self.rom.as_ptr() as *const c_void,
+            },
             size: self.rom.len(),
             meta: ptr::null(),
         };
